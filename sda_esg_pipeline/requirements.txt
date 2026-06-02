@@ -1,0 +1,31 @@
+# ── Core ──────────────────────────────────────────────────────────────────
+pandas>=2.0
+tenacity>=8.2            # retry w/ exponential backoff (Phase 1 fallback)
+requests>=2.31           # Slack alerting, generic HTTP
+
+# ── Phase 1: Quantitative engine ─────────────────────────────────────────
+# vnstock is consumed via Sponsor Tier; the package name on PyPI is `vnstock`.
+vnstock>=3.0
+
+# ── Phase 1: Unstructured crawler / infra ────────────────────────────────
+beautifulsoup4>=4.12     # Tier 1 DOM scraping (HOSE/HNX)
+lxml>=4.9
+feedparser>=6.0          # Tier 3 RSS aggregator
+redis>=5.0               # rate-limit + search cache + circuit breaker
+google-api-python-client>=2.0   # Tier 2 Google Custom Search Engine
+werkzeug>=3.0            # secure_filename (directory-traversal protection)
+
+# ── Phase 2: Extraction / OCR ────────────────────────────────────────────
+PyMuPDF>=1.23            # `import fitz` – text + raster rendering
+pdfplumber>=0.10         # table-extraction fallback
+camelot-py[cv]>=0.11     # priority grid/lattice table extraction
+pytesseract>=0.3.10      # OCR (needs the `tesseract` binary + `vie` lang pack)
+Pillow>=10.0
+
+# ── Phase 2: NLP cleaning / chunking / taxonomy ──────────────────────────
+transformers>=4.38       # PhoBERT tokenizer (vinai/phobert-base)
+torch>=2.0               # transformers backend
+pyahocorasick>=2.0       # O(n) multi-pattern taxonomy matching
+
+# ── Dev / test ───────────────────────────────────────────────────────────
+pytest>=8.0

@@ -1,0 +1,54 @@
+[build-system]
+requires = ["setuptools>=68", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "sda-esg-pipeline"
+version = "3.0.0"
+description = "ESG Quantitative Model — Data Ingestion (Phase 1) & Preprocessing (Phase 2) pipeline"
+readme = "README.md"
+requires-python = ">=3.10"
+license = { text = "Proprietary" }
+authors = [{ name = "ESG Data Engineering Team" }]
+
+# Runtime deps are pinned in requirements.txt; kept loose here so the package
+# imports with only the core stack present (heavy deps are imported lazily).
+dependencies = [
+    "pandas>=2.0",
+    "tenacity>=8.2",
+    "requests>=2.31",
+]
+
+[project.optional-dependencies]
+crawler = [
+    "beautifulsoup4>=4.12",
+    "lxml>=4.9",
+    "feedparser>=6.0",
+    "redis>=5.0",
+    "google-api-python-client>=2.0",
+    "werkzeug>=3.0",
+]
+extract = [
+    "PyMuPDF>=1.23",
+    "pdfplumber>=0.10",
+    "camelot-py[cv]>=0.11",
+    "pytesseract>=0.3.10",
+    "Pillow>=10.0",
+]
+nlp = ["transformers>=4.38", "torch>=2.0", "pyahocorasick>=2.0"]
+infra = ["celery>=5.3", "boto3>=1.34", "psycopg2-binary>=2.9", "clamd>=1.0.2"]
+dev = ["pytest>=8.0"]
+
+[project.scripts]
+esg-pipeline = "esg_pipeline.cli:main"
+
+[tool.setuptools.packages.find]
+include = ["esg_pipeline*"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+addopts = "-q"
+
+[tool.ruff]
+line-length = 100
+target-version = "py310"

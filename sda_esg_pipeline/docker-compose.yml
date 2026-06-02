@@ -1,0 +1,63 @@
+# Local orchestration of the full Phase 1/2 stack (SDAD §1).
+#
+#   docker compose up --build
+#
+# Production deploys these as managed services (ElastiCache, RDS, ECS/EKS) and
+# sources secrets from AWS Secrets Manager / Vault — see README §Security.
+services:
+  redis:
+    image: redis:7-alpine
+    ports: ["6379:6379"]
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 3s
+      retries: 5
+
+  postgres:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_USER: esg
+      POSTGRES_PASSWORD: esg
+      POSTGRES_DB: esg
+    ports: ["5432:5432"]
+    volumes: ["pgdata:/var/lib/postgresql/data"]
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U esg"]
+      interval: 5s
+      timeout: 3s
+      retries: 5
+
+  worker:
+    build: .
+    # AppArmor confinement for the extraction sandbox (§4.1). The profile must
+    # be loaded on the host first (see docker/apparmor-pdf-extractor.profile).
+    security_opt:
+      - apparmor=esg-pdf-extractor
+    environment:
+      REDIS_HOST: redis
+      CELERY_BROKER_URL: redis://redis:6379/1
+      CELERY_RESULT_BACKEND: redis://redis:6379/2
+      DATABASE_URL: postgresql://esg:esg@postgres:5432/esg
+      SECRET_BACKEND: env
+    depends_on:
+      redis: { condition: service_healthy }
+      postgres: { condition: service_healthy }
+    command: >
+      celery -A esg_pipeline.scheduler.celery_app:app worker
+      --loglevel=INFO -Q phase2,phase1 --concurrency=2
+
+  beat:
+    build: .
+    environment:
+      REDIS_HOST: redis
+      CELERY_BROKER_URL: redis://redis:6379/1
+      CELERY_RESULT_BACKEND: redis://redis:6379/2
+      DATABASE_URL: postgresql://esg:esg@postgres:5432/esg
+    depends_on:
+      redis: { condition: service_healthy }
+    command: >
+      celery -A esg_pipeline.scheduler.celery_app:app beat --loglevel=INFO
+
+volumes:
+  pgdata:
