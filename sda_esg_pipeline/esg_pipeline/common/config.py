@@ -8,9 +8,16 @@ from __future__ import annotations
 
 import os
 from dataclasses import dataclass, field
+from typing import overload
 
 
+@overload
+def _env(name: str, default: str) -> str: ...
+@overload
+def _env(name: str, default: None = None) -> str | None: ...
 def _env(name: str, default: str | None = None) -> str | None:
+    """Read an env var. Returns ``str`` when a string default is given,
+    otherwise ``str | None`` (so optional fields stay typed correctly)."""
     return os.getenv(name, default)
 
 

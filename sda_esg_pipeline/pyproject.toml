@@ -52,3 +52,42 @@ addopts = "-q"
 [tool.ruff]
 line-length = 100
 target-version = "py310"
+
+[tool.pyrefly]
+# These third-party packages are optional/heavy and imported lazily (inside
+# functions or behind try/except ImportError) so the core package runs without
+# them. Treat them as `Any` so the type checker doesn't raise missing-import
+# when only the core stack is installed; install the matching extras
+# (`pip install -e .[crawler,extract,nlp,infra]`) for full coverage.
+replace-imports-with-any = [
+  # infra extra
+  "clamd",
+  "boto3",
+  "botocore",
+  "botocore.*",
+  "hvac",
+  "psycopg2",
+  "celery",
+  "celery.*",
+  # crawler extra
+  "redis",
+  "feedparser",
+  "bs4",
+  "werkzeug",
+  "werkzeug.*",
+  "googleapiclient",
+  "googleapiclient.*",
+  # extract extra
+  "fitz",
+  "camelot",
+  "pdfplumber",
+  "pytesseract",
+  "PIL",
+  "PIL.*",
+  # nlp extra
+  "transformers",
+  "ahocorasick",
+  # quantitative engine (vnstock Sponsor Tier)
+  "vnstock",
+  "vnstock_data",
+]
