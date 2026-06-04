@@ -19,8 +19,11 @@ from .common.logging_config import configure_logging
 def _cmd_demo(_args) -> int:
     from .phase2_preprocessing.orchestrator import process_raw_text
 
-    raw = "Cong ty huong toi Net Zero.\n\nTong luong phat thai CO2 nam 2023 la 1500 tan."
-    records = process_raw_text(raw, "VNM", 2023, settings.taxonomy_path)
+    raw = "Cng ty huong toi N3t Zer0.\n\nTong luong phat thai CO2 nam 2023 la 1500 tan."
+    records = process_raw_text(
+        raw, "VNM", 2023, settings.taxonomy_path,
+        heading_context="Bao cao Moi truong", normalize_ocr=True,
+    )
     for rec in records:
         print(json.dumps(rec, ensure_ascii=False))
     return 0

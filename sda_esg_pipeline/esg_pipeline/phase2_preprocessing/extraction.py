@@ -12,12 +12,21 @@ from __future__ import annotations
 
 import io
 import logging
+import os
 
 logger = logging.getLogger(__name__)
 
 OCR_CONFIDENCE_THRESHOLD = 60
 CAMELOT_ACCURACY_THRESHOLD = 80
 OCR_DPI = 300
+# Camelot lattice detection is ~1-5 pages/sec; running it on every page of a
+# 100+ page report is wasteful and can hang a worker. Cap it (0 = all pages).
+TABLE_EXTRACT_MAX_PAGES = int(os.getenv("TABLE_EXTRACT_MAX_PAGES", "0"))
+
+
+def _pages_arg() -> str:
+    """Camelot ``pages`` spec honouring the page cap (e.g. '1-30' or 'all')."""
+    return f"1-{TABLE_EXTRACT_MAX_PAGES}" if TABLE_EXTRACT_MAX_PAGES > 0 else "all"
 
 
 def extract_tables_robust(pdf_path: str, is_scanned: bool) -> list[str]:
@@ -37,7 +46,7 @@ def extract_tables_robust(pdf_path: str, is_scanned: bool) -> list[str]:
     try:
         # Priority 1: Camelot for grid/lattice-based tables.
         tables = camelot.read_pdf(
-            pdf_path, pages="all", flavor="lattice", line_scale=40
+            pdf_path, pages=_pages_arg(), flavor="lattice", line_scale=40
         )
         valid_tables = [t.df for t in tables if t.accuracy > CAMELOT_ACCURACY_THRESHOLD]
         if not valid_tables:
@@ -56,9 +65,10 @@ def extract_tables_robust(pdf_path: str, is_scanned: bool) -> list[str]:
                 if sentence:
                     tables_as_text.append(sentence)
     except Exception:  # noqa: BLE001 - Camelot raises many concrete types
-        # Priority 2: fall back to pdfplumber.
+        # Priority 2: fall back to pdfplumber (also honouring the page cap).
         with pdfplumber.open(pdf_path) as pdf:
-            for page in pdf.pages:
+            pages = pdf.pages[:TABLE_EXTRACT_MAX_PAGES] if TABLE_EXTRACT_MAX_PAGES > 0 else pdf.pages
+            for page in pages:
                 for table in page.extract_tables():
                     if not table or len(table[0]) < 2:
                         continue
@@ -95,7 +105,10 @@ def _extract_text_based(pdf_path: str) -> dict:
         doc.close()
 
     tables = extract_tables_robust(pdf_path, is_scanned=False)
-    return {"raw_text": "\n".join(raw_text_pages), "tables": tables}
+    # Join pages with a blank line: a page boundary is a paragraph boundary, so
+    # the last line of page N never merges into the first line of page N+1 when
+    # §8 cleaning collapses single newlines.
+    return {"raw_text": "\n\n".join(raw_text_pages), "tables": tables}
 
 
 def _extract_scan_based(pdf_path: str) -> dict:

@@ -33,13 +33,15 @@ def _build_records(
     ticker: str,
     fiscal_year: int,
     tagger: TaxonomyTagger,
+    heading_context: str = "Thong tin chung",
+    normalize_ocr: bool = False,
 ) -> list[dict]:
     """Clean -> chunk -> tag; return only ESG-relevant records."""
     records: list[dict] = []
 
     # Body text → semantic chunks (chunk_source = TEXT).
-    paragraphs = clean_text_advanced(extracted.get("raw_text", ""))
-    for chunk in chunk_document(paragraphs):
+    paragraphs = clean_text_advanced(extracted.get("raw_text", ""), normalize_ocr=normalize_ocr)
+    for chunk in chunk_document(paragraphs, initial_heading=heading_context):
         tags = tagger.tag(chunk["text"])
         if tags:
             records.append(
@@ -81,7 +83,9 @@ def process_single_document(
     """Run the full Phase 2 pipeline for one document.
 
     ``metadata.json`` must contain: ``absolute_storage_path``, ``ticker``,
-    ``fiscal_year``, ``pdf_type_flag`` ("SCAN_BASED" | "TEXT_BASED").
+    ``fiscal_year``, ``pdf_type_flag`` ("SCAN_BASED" | "TEXT_BASED"). Optional
+    keys: ``heading_context`` (upstream section label) and ``normalize_ocr``
+    (bool; default True for scanned docs since OCR introduces leet/confusables).
 
     Returns the number of ESG-relevant chunks written.
     """
@@ -92,10 +96,15 @@ def process_single_document(
     ticker = meta["ticker"]
     year = meta["fiscal_year"]
     is_scanned = meta["pdf_type_flag"] == "SCAN_BASED"
+    heading_context = meta.get("heading_context", "Thong tin chung")
+    normalize_ocr = meta.get("normalize_ocr", is_scanned)
 
     extracted = extract_document(pdf_path, is_scanned)
     tagger = TaxonomyTagger(taxonomy_path)
-    records = _build_records(extracted, ticker, year, tagger)
+    records = _build_records(
+        extracted, ticker, year, tagger,
+        heading_context=heading_context, normalize_ocr=normalize_ocr,
+    )
 
     os.makedirs(output_dir, exist_ok=True)
     output_path = os.path.join(output_dir, f"{ticker}_{year}_chunks.jsonl")
@@ -112,7 +121,16 @@ def process_raw_text(
     ticker: str,
     fiscal_year: int,
     taxonomy_path: str = DEFAULT_TAXONOMY_PATH,
+    heading_context: str = "Thong tin chung",
+    normalize_ocr: bool = False,
 ) -> list[dict]:
-    """Convenience path for the SDAD §10 raw-OCR-text demo (no PDF on disk)."""
+    """Convenience path for the SDAD §10 raw-OCR-text demo (no PDF on disk).
+
+    Set ``normalize_ocr=True`` and ``heading_context`` to reproduce the §10
+    example exactly from its raw "N3t Zer0" input.
+    """
     tagger = TaxonomyTagger(taxonomy_path)
-    return _build_records({"raw_text": raw_text, "tables": []}, ticker, fiscal_year, tagger)
+    return _build_records(
+        {"raw_text": raw_text, "tables": []}, ticker, fiscal_year, tagger,
+        heading_context=heading_context, normalize_ocr=normalize_ocr,
+    )

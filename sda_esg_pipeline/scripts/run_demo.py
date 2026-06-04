@@ -19,10 +19,11 @@ sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), "..")
 
 from esg_pipeline.phase2_preprocessing.orchestrator import process_raw_text  # noqa: E402
 
-# Input (raw OCR text) — from the SDAD §10 demo.
+# Input (raw OCR text) — verbatim from the SDAD §10 demo, including the
+# leet/dropped-vowel OCR noise ("Cng", "N3t Zer0"). normalize_ocr repairs it.
 SAMPLE_INPUT = {
     "raw_text": (
-        "Cong ty huong toi Net Zero.\n\n"
+        "Cng ty huong toi N3t Zer0.\n\n"
         "Tong luong phat thai CO2 nam 2023 la 1500 tan."
     )
 }
@@ -38,6 +39,8 @@ def main() -> None:
         ticker="VNM",
         fiscal_year=2023,
         taxonomy_path=TAXONOMY_PATH,
+        heading_context="Bao cao Moi truong",
+        normalize_ocr=True,
     )
 
     print("Input (raw OCR text):")

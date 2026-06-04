@@ -10,6 +10,15 @@ Production-ready:
     | Boundary Err. | Mis-split sentence ratio in chunking     | < 1%              |
     | Taxonomy FP   | False-positive ratio in ESG tagging      | < 10%             |
     | Throughput    | Aho-Corasick + chunking on 1 CPU core    | > 500 pages / sec |
+
+NOTE on the throughput SLA (see docs/DANH_GIA_SDA.md issue #4). The SDAD's
+">500 pages/sec" target is scoped to the *Aho-Corasick + chunking* micro-step
+only, and on reference hardware that step measures ~600 pages/sec (taxonomy scan
+alone ~40k pages/sec), so the target IS met. It is, however, misleading as an
+*end-to-end* Phase 2 figure: the real bottleneck is extraction (Camelot ~1-5
+pages/sec) and especially OCR (~0.1-1 pages/sec). We therefore keep the micro
+SLA (``throughput_pps``) and add an honest end-to-end SLA (``throughput_e2e_pps``)
+bounded by extraction/OCR.
 """
 from __future__ import annotations
 
@@ -75,10 +84,12 @@ def taxonomy_false_positive_rate(false_positives: int, total_tags: int) -> float
 
 
 def measure_throughput(process_fn, pages: list, *, repeat: int = 1) -> float:
-    """Pages/second for ``process_fn`` over ``pages`` (> 500 pages/sec SLA).
+    """Pages/second for ``process_fn`` over ``pages``.
 
     ``process_fn`` is called once per page; ``repeat`` re-runs the whole set to
-    smooth out timing noise on tiny inputs.
+    smooth out timing noise on tiny inputs. Use it both for the AC+chunking micro
+    benchmark (``throughput_pps``) and the end-to-end figure (``throughput_e2e_pps``)
+    by passing the relevant callable.
     """
     if not pages:
         return 0.0
@@ -89,6 +100,11 @@ def measure_throughput(process_fn, pages: list, *, repeat: int = 1) -> float:
     elapsed = time.perf_counter() - start
     processed = len(pages) * repeat
     return processed / elapsed if elapsed > 0 else float("inf")
+
+
+def measure_taxonomy_throughput(tagger, pages: list[str], *, repeat: int = 1) -> float:
+    """Pages/sec for the pure Aho-Corasick taxonomy scan (``tagger.tag``)."""
+    return measure_throughput(tagger.tag, pages, repeat=repeat)
 
 
 # ── SLA gate ─────────────────────────────────────────────────────────────────
@@ -107,7 +123,11 @@ SLA_TARGETS: dict[str, SLA] = {
     "table_extraction": SLA("Table Extraction", 0.85, ">"),
     "boundary_error": SLA("Boundary Error", 0.01, "<"),
     "taxonomy_fp": SLA("Taxonomy FP", 0.10, "<"),
-    "throughput_pps": SLA("Throughput (pages/sec)", 500.0, ">"),
+    # SDAD's micro benchmark: Aho-Corasick + chunking only (achievable, ~600 pps).
+    "throughput_pps": SLA("Throughput AC+chunking (pages/sec)", 500.0, ">"),
+    # Honest end-to-end Phase 2 target — bounded by extraction/OCR, NOT in the
+    # original SDAD. 3 pages/sec/core is a realistic text-based-PDF floor.
+    "throughput_e2e_pps": SLA("Throughput end-to-end (pages/sec)", 3.0, ">"),
 }
 
 

@@ -21,8 +21,23 @@ logger = logging.getLogger(__name__)
 _ESG_ORDER = {"E": 0, "S": 1, "G": 2}
 
 
+def _strip_diacritics(text: str) -> str:
+    """Fold Vietnamese diacritics so 'an toàn lao động' == 'an toan lao dong'.
+
+    The SME taxonomy is authored in *no-diacritic* form, but real reports use
+    full diacritics — without folding, only diacritic-free keywords ('net zero',
+    'co2') ever match. We NFD-decompose, drop combining marks, and special-case
+    đ/Đ (which is a distinct letter, not a base+mark). See docs/DANH_GIA_SDA.md
+    issue #6.
+    """
+    decomposed = unicodedata.normalize("NFD", text)
+    no_marks = "".join(c for c in decomposed if not unicodedata.combining(c))
+    return no_marks.replace("đ", "d").replace("Đ", "D")
+
+
 def _norm(text: str) -> str:
-    return unicodedata.normalize("NFC", text.lower())
+    """Lowercase + diacritic-fold for diacritic-insensitive matching."""
+    return _strip_diacritics(unicodedata.normalize("NFC", text.lower()))
 
 
 class TaxonomyTagger:

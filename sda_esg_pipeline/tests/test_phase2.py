@@ -11,6 +11,7 @@ from esg_pipeline.phase2_preprocessing.cleaning import (  # noqa: E402
     chunk_document,
     clean_text_advanced,
     is_heading,
+    normalize_ocr_artifacts,
 )
 from esg_pipeline.phase2_preprocessing.orchestrator import process_raw_text  # noqa: E402
 from esg_pipeline.phase2_preprocessing.taxonomy import TaxonomyTagger  # noqa: E402
@@ -25,6 +26,14 @@ def test_clean_joins_intra_sentence_newlines_and_drops_page_noise():
     assert "Cau bi ngat dong giua." in paras
     assert "Doan hai." in paras
     assert all("Trang 12" not in p for p in paras)
+
+
+def test_normalize_ocr_artifacts_fixes_leet_and_preserves_chemicals():
+    assert normalize_ocr_artifacts("N3t Zer0") == "Net Zero"
+    assert normalize_ocr_artifacts("Cng ty") == "Cong ty"
+    # Chemical formulas and numbers must survive untouched.
+    assert "CO2" in normalize_ocr_artifacts("phat thai CO2 nam 2023 la 1500 tan")
+    assert "2023" in normalize_ocr_artifacts("nam 2023")
 
 
 def test_is_heading_detects_numbered_sections():
@@ -66,3 +75,20 @@ def test_demo_produces_expected_emissions_chunk():
     assert "CO2" in rec["filtered_chunk_text"]  # chemical figure preserved
     # token_count is populated and within the PhoBERT-safe bound.
     assert 0 < rec["token_count"] <= 200
+
+
+def test_demo_reproduces_sdad_section10_output():
+    """Raw §10 input ("Cng … N3t Zer0") → the documented §10 output record."""
+    raw = "Cng ty huong toi N3t Zer0.\n\nTong luong phat thai CO2 nam 2023 la 1500 tan."
+    records = process_raw_text(
+        raw, ticker="VNM", fiscal_year=2023, taxonomy_path=CONFIG,
+        heading_context="Bao cao Moi truong", normalize_ocr=True,
+    )
+    assert len(records) == 1
+    rec = records[0]
+    assert rec["heading_context"] == "Bao cao Moi truong"
+    assert rec["filtered_chunk_text"] == (
+        "Cong ty huong toi Net Zero. Tong luong phat thai CO2 nam 2023 la 1500 tan."
+    )
+    assert rec["matched_tags"] == ["E_Emissions"]
+    assert rec["chunk_source"] == "TEXT"

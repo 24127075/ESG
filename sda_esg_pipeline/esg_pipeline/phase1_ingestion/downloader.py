@@ -12,9 +12,21 @@ from ..common.exceptions import PDFCorruptedException
 
 logger = logging.getLogger(__name__)
 
-DOWNLOAD_TIMEOUT = 30
+DOWNLOAD_TIMEOUT = 60
 MAX_BYTES = 100 * 1024 * 1024  # 100 MB guard
 _PDF_MAGIC = b"%PDF-"
+
+# Many corporate IR/disclosure servers reject the default ``python-requests``
+# User-Agent with HTTP 403. Present as a normal browser. (Production: rotate UAs
+# / honour robots.txt as policy dictates.)
+_DEFAULT_HEADERS = {
+    "User-Agent": (
+        "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 "
+        "(KHTML, like Gecko) Chrome/124.0 Safari/537.36"
+    ),
+    "Accept": "application/pdf,application/octet-stream,*/*",
+    "Accept-Language": "vi,en;q=0.8",
+}
 
 
 def sha256_bytes(content: bytes) -> str:
@@ -61,7 +73,10 @@ def download_document(url: str, expect_pdf: bool = True) -> tuple[bytes, str]:
     """
     import requests
 
-    resp = requests.get(url, timeout=DOWNLOAD_TIMEOUT, stream=True)
+    resp = requests.get(
+        url, timeout=DOWNLOAD_TIMEOUT, stream=True,
+        headers=_DEFAULT_HEADERS, allow_redirects=True,
+    )
     resp.raise_for_status()
 
     chunks: list[bytes] = []

@@ -67,9 +67,19 @@ python scripts/run_demo.py
 #   or, after `pip install -e .`:
 esg-pipeline demo
 
+# REAL data (no API key): pull FF6 quant inputs via the FREE vnstock package:
+python scripts/fetch_quant_demo.py --tickers VNM,FPT,HPG
+
+# REAL data: run Phase 2 on a real report PDF (or a generated sample) → JSONL:
+python scripts/run_phase2_pdf.py --ticker DEMO --year 2023            # offline sample
+python scripts/run_phase2_pdf.py --url <report.pdf> --ticker VNM --year 2024
+
 # Run the test suite (offline, uses built-in fallbacks):
-pytest -q          # 19 passed
+pytest -q          # 21 passed
 ```
+
+> 🇻🇳 Hướng dẫn chạy & đánh giá SDA bằng tiếng Việt:
+> [docs/HUONG_DAN_CHAY.md](docs/HUONG_DAN_CHAY.md) · [docs/DANH_GIA_SDA.md](docs/DANH_GIA_SDA.md)
 
 ### Graceful degradation
 
@@ -135,18 +145,31 @@ n = process_single_document("doc_meta.json", output_dir="./out")   # → ./out/V
 
 ## Notes on fidelity to the spec
 
-- **`clean_text_advanced` step order** — the SDAD lists footer-noise removal
-  *after* the newline-collapse step, at which point a footer preceded by a
-  single newline has already merged into the previous sentence and escapes the
-  `^…$` filter. The two steps are reordered here so footer removal works as
-  intended (commented in `cleaning.py`).
-- **§10 output example** — `heading_context: "Bao cao Moi truong"` and the
-  leet-corrected `Net Zero`/`CO2` come from upstream metadata + an OCR-correction
-  step not present in any snippet; the implementation keeps the documented
-  cleaning rules verbatim, so the demo's `heading_context` defaults to
-  `"Thong tin chung"` unless supplied via metadata.
-- **Token counting** uses PhoBERT when available; the offline fallback is a
+A full, prioritised assessment of where the SDAD is unrealistic/inconsistent —
+and every patch applied — is in **[docs/DANH_GIA_SDA.md](docs/DANH_GIA_SDA.md)**
+(Vietnamese). Highlights:
+
+- **Quant engine uses FREE vnstock**, not the paid `vnstock_data` Sponsor Tier
+  the SDAD §2.3 snippet imports (which isn't installable). `quantitative.py`
+  targets the real public API and is verified against live data.
+- **§10 output is now reproducible** — `cleaning.normalize_ocr_artifacts` repairs
+  the leet input (`N3t Zer0`→`Net Zero`, protecting `CO2`/`kWh`), and
+  `heading_context` is threaded through metadata, so `run_demo.py` emits exactly
+  the documented record.
+- **Diacritic-insensitive taxonomy** — the SME dictionary is no-diacritic but
+  real reports use full diacritics; matching now folds diacritics (on the real
+  VNM 2024 report this lifted E-only → full E/S/G, 12 → 51 chunks).
+- **Throughput SLA split** — the ">500 pages/sec" target is the AC+chunking
+  micro-benchmark (met, ~600 pps); a realistic end-to-end SLA bounded by
+  extraction/OCR was added (`metrics.throughput_e2e_pps`).
+- **`clean_text_advanced` step order** — footer-noise removal runs *before* the
+  newline-collapse (the SDAD order lets single-newline footers escape the
+  `^…$` filter); pages are joined with a blank line so paragraphs survive.
+- **Downloader** sends a browser User-Agent (real IR servers 403 the default).
+- **Windows UTF-8** — stdout/stderr are reconfigured so the vnstock banner can't
+  crash cp1252 consoles.
+- **Token counting** uses PhoBERT when available; offline fallback is a
   conservative whitespace count.
-- **`metadata_repo`** targets PostgreSQL in Production (per the SDAD); the
-  SQLite backend is for local dev/tests and shares identical SQL.
+- **`metadata_repo`** targets PostgreSQL in Production; the SQLite backend is for
+  local dev/tests and shares identical SQL.
 ```

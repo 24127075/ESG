@@ -9,6 +9,7 @@ from __future__ import annotations
 
 import logging
 import os
+from urllib.parse import urlparse
 
 from ..common.exceptions import QuotaExceededException
 
@@ -18,9 +19,44 @@ DEVELOPER_KEY = os.getenv("GOOGLE_API_KEY")
 CX = os.getenv("GOOGLE_CX_ID")
 
 TRUSTED_TLDS = (".vn", ".com.vn")
-SCAM_KEYWORDS = ("tailieu", "doc", "scribd", "123doc")
+
+# Known document-piracy / fake-IR hosts to reject. Matched by *host* (exact or
+# subdomain), NOT by substring — the old SDAD code used ``'doc' in domain`` which
+# false-blocks any legitimate host containing the substring "doc" (e.g.
+# ``baocaothuongnien…``? no, but any ``*doc*`` host) while ``'123doc'`` already
+# contains ``'doc'`` and was redundant. See docs/DANH_GIA_SDA.md issue #2.
+SCAM_DOMAINS = frozenset(
+    {
+        "tailieu.vn",
+        "123doc.vn",
+        "123doc.net",
+        "123docz.net",
+        "scribd.com",
+        "slideshare.net",
+        "academia.edu",
+        "coursehero.com",
+        "studocu.com",
+        "text.123docz.net",
+    }
+)
 
 CACHE_TTL_SECONDS = 2_592_000  # 30 days
+
+
+def _hostname(url: str) -> str | None:
+    """Robustly extract a lowercase hostname from a URL.
+
+    Tolerates URLs without a scheme (``example.com/x.pdf``), with ports, or with
+    userinfo — unlike the SDAD's ``url.split('/')[2]`` which breaks on all three.
+    """
+    parsed = urlparse(url if "://" in url else f"//{url}", scheme="https")
+    host = parsed.hostname
+    return host.lower() if host else None
+
+
+def _is_piracy_host(host: str) -> bool:
+    """True if ``host`` is, or is a subdomain of, a known piracy/fake-IR host."""
+    return any(host == bad or host.endswith("." + bad) for bad in SCAM_DOMAINS)
 
 
 def _get_redis():
@@ -35,14 +71,20 @@ def _get_redis():
 
 
 def is_trusted_domain(url: str, official_domain: str) -> bool:
-    """Reject piracy/fake-IR domains; accept the issuer's own domain or VN TLDs."""
-    try:
-        domain = url.split("/")[2].lower()
-    except IndexError:
+    """Reject piracy/fake-IR domains; accept the issuer's own domain or VN TLDs.
+
+    A piracy host is rejected even when it sits under a trusted TLD (e.g.
+    ``123doc.vn``), so the blocklist is checked *before* the TLD allowance.
+    """
+    host = _hostname(url)
+    if not host:
         return False
-    if any(k in domain for k in SCAM_KEYWORDS):
+    if _is_piracy_host(host):
         return False
-    return official_domain in domain or domain.endswith(TRUSTED_TLDS)
+    official = official_domain.lower()
+    if host == official or host.endswith("." + official):
+        return True
+    return host.endswith(TRUSTED_TLDS)
 
 
 def search_esg_report(
