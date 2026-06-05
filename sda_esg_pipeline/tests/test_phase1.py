@@ -12,7 +12,10 @@ sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), "..")
 from esg_pipeline.common.exceptions import QuotaExceededException  # noqa: E402
 from esg_pipeline.common.security import safe_filename, safe_join  # noqa: E402
 from esg_pipeline.common.state import DocumentState, can_transition  # noqa: E402
-from esg_pipeline.phase1_ingestion.crawler_tier2 import is_trusted_domain  # noqa: E402
+from esg_pipeline.phase1_ingestion.crawler_tier2 import (  # noqa: E402
+    _pick_report_url,
+    is_trusted_domain,
+)
 from esg_pipeline.phase1_ingestion.deduplication import generate_content_hash  # noqa: E402
 from esg_pipeline.phase1_ingestion.downloader import looks_like_pdf, sha256_bytes  # noqa: E402
 from esg_pipeline.phase1_ingestion.metadata_repo import MetadataRepository  # noqa: E402
@@ -71,6 +74,24 @@ def test_trusted_domain_filter():
     assert is_trusted_domain("https://abc.vn/x.pdf", "other.com")  # VN TLD ok
     assert not is_trusted_domain("https://scribd.com/x.pdf", "vinamilk.com.vn")
     assert not is_trusted_domain("https://123doc.vn/x.pdf", "vinamilk.com.vn")
+
+
+# ── DuckDuckGo result picking (§3.2, offline/pure) ──────────────────────────
+def test_pick_report_url_prefers_trusted_pdf_and_drops_piracy():
+    results = [
+        {"href": "https://scribd.com/vnm.pdf"},          # piracy → drop
+        {"href": "https://news.vn/article"},             # not a pdf
+        {"href": "https://ir.vinamilk.com.vn/bctn.pdf"},  # trusted pdf → pick
+        {"href": "https://random.org/x.pdf"},            # non-trusted pdf
+    ]
+    assert _pick_report_url(results, "vinamilk.com.vn") == "https://ir.vinamilk.com.vn/bctn.pdf"
+    # No trusted hit → best-effort non-piracy pdf.
+    assert _pick_report_url(
+        [{"href": "https://123doc.vn/a.pdf"}, {"href": "https://fpt.com/r.pdf"}],
+        "fpt.com.vn",
+    ) == "https://fpt.com/r.pdf"
+    # Nothing usable.
+    assert _pick_report_url([{"href": "https://scribd.com/a.pdf"}], "x.com.vn") is None
 
 
 # ── rate limiter + quota guard ──────────────────────────────────────────────

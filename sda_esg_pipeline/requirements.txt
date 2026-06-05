@@ -12,8 +12,8 @@ vnstock>=3.0
 beautifulsoup4>=4.12     # Tier 1 DOM scraping (HOSE/HNX)
 lxml>=4.9
 feedparser>=6.0          # Tier 3 RSS aggregator
-redis>=5.0               # rate-limit + search cache + circuit breaker
-google-api-python-client>=2.0   # Tier 2 Google Custom Search Engine
+redis>=5.0               # rate-limit + search cache + circuit breaker (optional)
+ddgs>=6.0                # Tier 2 search — FREE DuckDuckGo, no API key (replaces Google CSE)
 werkzeug>=3.0            # secure_filename (directory-traversal protection)
 
 # ── Phase 2: Extraction / OCR ────────────────────────────────────────────

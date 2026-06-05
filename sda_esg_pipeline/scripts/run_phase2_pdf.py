@@ -9,7 +9,11 @@ Three input modes:
     # 2) Download a real report by URL first (malware-scanned, §1 downloader):
     python scripts/run_phase2_pdf.py --url https://.../baocao.pdf --ticker FPT --year 2023
 
-    # 3) No input → generate a representative Vietnamese ESG PDF and run on it
+    # 3) Auto-discover the report with the FREE DuckDuckGo search (no API key),
+    #    download it, then run Phase 2 (§3.2 Tier 2):
+    python scripts/run_phase2_pdf.py --search --ticker FPT --year 2023
+
+    # 4) No input → generate a representative Vietnamese ESG PDF and run on it
     #    (fully offline, proves the PDF→extract→clean→chunk→tag→JSONL path):
     python scripts/run_phase2_pdf.py
 
@@ -81,6 +85,10 @@ def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--pdf", help="Path to an existing local PDF")
     parser.add_argument("--url", help="URL of a real report PDF to download first")
+    parser.add_argument(
+        "--search", action="store_true",
+        help="Auto-discover the report via free DuckDuckGo search (no API key)",
+    )
     parser.add_argument("--ticker", default="DEMO")
     parser.add_argument("--year", type=int, default=2023)
     parser.add_argument("--scanned", action="store_true", help="Force the OCR path")
@@ -90,9 +98,21 @@ def main() -> int:
     os.makedirs(args.out, exist_ok=True)
     pdf_path = args.pdf
 
-    if args.url:
+    url = args.url
+    if args.search and not url:
+        from esg_pipeline.phase1_ingestion.crawler_tier2 import search_esg_report
+
+        official = f"{args.ticker.lower()}.com.vn"
+        print(f"Searching DuckDuckGo for {args.ticker} {args.year} report…")
+        url = search_esg_report(args.ticker, args.year, official)
+        if not url:
+            print("No report PDF found via search. Try --url or --pdf.")
+            return 1
+        print(f"Found: {url}")
+
+    if url:
         pdf_path = os.path.join(args.out, f"{args.ticker}_{args.year}.pdf")
-        _download(args.url, pdf_path)
+        _download(url, pdf_path)
     elif not pdf_path:
         pdf_path = os.path.join(args.out, f"{args.ticker}_{args.year}_sample.pdf")
         _make_sample_pdf(pdf_path)
@@ -113,6 +133,12 @@ def main() -> int:
     n = process_single_document(meta_path, args.out)
     out_jsonl = os.path.join(args.out, f"{args.ticker}_{args.year}_chunks.jsonl")
     print(f"\nWrote {n} ESG-relevant chunks → {out_jsonl}\n")
+    if n == 0 and not args.scanned:
+        print(
+            "  Hint: 0 chunks — this PDF may be image/scan-based (no text layer).\n"
+            f"  Re-run with OCR:  python scripts/run_phase2_pdf.py --pdf {pdf_path} "
+            f"--ticker {args.ticker} --year {args.year} --scanned\n"
+        )
     if os.path.exists(out_jsonl):
         with open(out_jsonl, "r", encoding="utf-8") as f:
             for line in f:

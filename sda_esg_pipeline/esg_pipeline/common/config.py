@@ -28,9 +28,11 @@ class Settings:
     redis_port: int = field(default_factory=lambda: int(_env("REDIS_PORT", "6379")))
     redis_db: int = field(default_factory=lambda: int(_env("REDIS_DB", "0")))
 
-    # --- Tier 2: Google Custom Search Engine ---
-    google_api_key: str | None = field(default_factory=lambda: _env("GOOGLE_API_KEY"))
-    google_cx_id: str | None = field(default_factory=lambda: _env("GOOGLE_CX_ID"))
+    # --- Tier 2: search engine ---
+    # DuckDuckGo (free, keyless) replaces Google CSE — no credentials needed.
+    ddg_max_results: int = field(
+        default_factory=lambda: int(_env("DDG_MAX_RESULTS", "10"))
+    )
 
     # --- Monitoring (§5) ---
     slack_webhook: str | None = field(default_factory=lambda: _env("SLACK_ALERT_WEBHOOK"))

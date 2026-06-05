@@ -7,7 +7,7 @@ section references (e.g. *§3.2*) appear in each module's docstring.
 
 - **Phase 1 — Data Ingestion**: Celery-scheduled pull of Fama-French 6-factor
   inputs from `vnstock` (retry + CSV fallback), a 3-tier crawler (HOSE/HNX,
-  Google CSE, RSS) behind a Redis rate-limit/quota guard, malware-scanned &
+  DuckDuckGo (free, keyless), RSS) behind a Redis rate-limit/quota guard, malware-scanned &
   SHA-256-deduplicated downloads, and Local + S3 (versioned) storage with a
   PostgreSQL-backed document state machine.
 - **Phase 2 — Preprocessing**: text/table extraction (PyMuPDF, Camelot,
@@ -36,7 +36,7 @@ sda_esg_pipeline/
 │   ├── phase1_ingestion/
 │   │   ├── quantitative.py  # vnstock → FF6 inputs + retry/CSV fallback (§2)
 │   │   ├── crawler_tier1.py # HOSE/HNX DOM scraping (§3.1)
-│   │   ├── crawler_tier2.py # Google CSE + circuit breaker + cache (§3.2)
+│   │   ├── crawler_tier2.py # DuckDuckGo (free, keyless) + circuit breaker + cache (§3.2)
 │   │   ├── crawler_tier3.py # RSS aggregator (§3.3)
 │   │   ├── deduplication.py # NFC + SHA-256 news dedup (§3.4)
 │   │   ├── rate_limiter.py  # Redis rate limit + daily quota (§1, §3.2)
@@ -91,7 +91,7 @@ heavy deps are imported lazily and fall back where possible:
 | Exact token counting           | `transformers` + `vinai/phobert-base` | whitespace word count |
 | O(n) taxonomy matching         | `pyahocorasick`                       | pure-Python scanner (same results) |
 | PDF text / OCR / tables        | `PyMuPDF`/`pytesseract`/`camelot`/`pdfplumber` | needed only for real PDFs |
-| Quant / crawler / infra        | `vnstock`/`redis`/`googleapiclient`/`celery`/`boto3`/`psycopg2` | needed only for live ingestion |
+| Quant / crawler / infra        | `vnstock`/`redis`/`ddgs`/`celery`/`boto3`/`psycopg2` | needed only for live ingestion |
 
 `scripts/run_demo.py` and all of `tests/` need **none** of the heavy deps.
 

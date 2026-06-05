@@ -18,7 +18,7 @@ Dự án xây dựng **dữ liệu đầu vào sạch** cho một **mô hình đ
 | Thành phần                                                        | Làm gì                                                                                          | Vì sao thiết kế vậy                                                                        |
 | ------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------- |
 | **Quantitative** (`phase1_ingestion/quantitative.py`)       | Lấy OHLCV + BCTC qua**vnstock FREE**; tính ME, tăng trưởng tài sản                   | Dữ liệu thật, không cần API key;**retry + fallback CSV** để pipeline không đứt |
-| **Crawler 3 tầng** (`crawler_tier1/2/3`)                   | Tier1 quét DOM HOSE/HNX; Tier2 Google CSE (có cache/circuit-breaker); Tier3 RSS                 | Đa nguồn, có chặn domain giả mạo, tiết kiệm quota                                      |
+| **Crawler 3 tầng** (`crawler_tier1/2/3`)                   | Tier1 quét DOM HOSE/HNX; Tier2 DuckDuckGo (miễn phí, không key); Tier3 RSS                 | Đa nguồn, có chặn domain giả mạo, tiết kiệm quota                                      |
 | **Downloader** (`downloader.py`)                            | Tải file,**quét mã độc (ClamAV)**, băm **SHA-256**                              | Chống mã độc & trùng lặp trước khi lưu                                                |
 | **Dedup** (`deduplication.py`)                              | Chuẩn hóa**NFC** rồi SHA-256                                                             | Tránh 2 kiểu gõ Unicode sinh 2 hash khác nhau                                              |
 | **Storage / Metadata** (`storage.py`, `metadata_repo.py`) | Lưu Local +**S3 versioned**; **máy trạng thái** tài liệu trong PostgreSQL       | Phục hồi sau lỗi, truy vết phiên bản                                                     |
@@ -86,7 +86,7 @@ Cài theo nhóm extras (tuỳ chọn): `pip install -e ".[crawler,extract,nlp,in
 Tạo file môi trường nếu chạy crawler/hạ tầng:
 
 ```powershell
-Copy-Item .env.example .env      # rồi điền GOOGLE_API_KEY, REDIS_HOST, ... khi cần
+Copy-Item .env.example .env      # Tier 2 (DuckDuckGo) KHÔNG cần key; chỉ điền REDIS_*/SLACK/S3 khi dùng
 ```
 
 ---
@@ -129,9 +129,16 @@ python scripts/run_phase2_pdf.py --pdf duong_dan/bao_cao.pdf --ticker VNM --year
 $env:TABLE_EXTRACT_MAX_PAGES=8
 python scripts/run_phase2_pdf.py --url "https://static2.vietstock.vn/data/HOSE/2024/BCTN/VN/VNM_Baocaothuongnien_2024.pdf" --ticker VNM --year 2024
 
+# (d) TỰ TÌM báo cáo bằng DuckDuckGo (MIỄN PHÍ, không cần API key) rồi chạy:
+python scripts/run_phase2_pdf.py --search --ticker FPT --year 2023
+
 # Tài liệu scan (bật nhánh OCR Tesseract):
 python scripts/run_phase2_pdf.py --pdf scan.pdf --ticker ABC --year 2023 --scanned
 ```
+
+> Tier 2 (tìm báo cáo) dùng **DuckDuckGo** qua gói `ddgs` — **không cần API key**,
+> thay cho Google CSE. Một số báo cáo là **bản scan ảnh** (không có lớp text) →
+> chạy lại với `--scanned` để bật OCR (script sẽ tự gợi ý khi gặp 0 chunk).
 
 Kết quả: `out/phase2/<MÃ>_<NĂM>_chunks.jsonl` (mỗi dòng 1 chunk đã gắn nhãn E/S/G).
 
@@ -198,7 +205,7 @@ $env:PYTHONUTF8 = "1"
 | `STATIC_FALLBACK_ROOT`             | Thư mục CSV fallback định lượng                           | `./data/static_fallback` |
 | `DATABASE_URL`                     | DB máy trạng thái (`postgresql://...` / `sqlite:///...`) | SQLite local               |
 | `REDIS_HOST/PORT/DB`               | Redis cho rate-limit/cache/broker                               | `localhost:6379`         |
-| `GOOGLE_API_KEY`, `GOOGLE_CX_ID` | Google CSE (Tier 2)                                             | rỗng                      |
+| `DDG_MAX_RESULTS`                  | Số kết quả DuckDuckGo (Tier 2, không cần key)             | `10`                     |
 | `SLACK_ALERT_WEBHOOK`              | Cảnh báo Slack khi lỗi ≥15%                                 | rỗng                      |
 | `SECRET_BACKEND`                   | `env`/`aws`/`vault`                                       | `env`                    |
 | `PYTHONUTF8`                       | Ép UTF-8 (Windows)                                             | —                         |

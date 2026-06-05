@@ -25,7 +25,7 @@ crawler = [
     "lxml>=4.9",
     "feedparser>=6.0",
     "redis>=5.0",
-    "google-api-python-client>=2.0",
+    "ddgs>=6.0",          # FREE DuckDuckGo search (Tier 2), no API key
     "werkzeug>=3.0",
 ]
 extract = [
@@ -75,8 +75,7 @@ replace-imports-with-any = [
   "bs4",
   "werkzeug",
   "werkzeug.*",
-  "googleapiclient",
-  "googleapiclient.*",
+  "ddgs",
   # extract extra
   "fitz",
   "camelot",

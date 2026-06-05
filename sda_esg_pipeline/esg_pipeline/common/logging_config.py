@@ -36,5 +36,5 @@ def configure_logging(level: str | None = None) -> None:
     resolved = (level or os.getenv("LOG_LEVEL", "INFO")).upper()
     logging.basicConfig(level=resolved, format=_FORMAT)
     # Quiet noisy third-party libraries.
-    for noisy in ("urllib3", "botocore", "boto3", "googleapiclient"):
+    for noisy in ("urllib3", "botocore", "boto3", "primp", "ddgs", "httpx"):
         logging.getLogger(noisy).setLevel(logging.WARNING)

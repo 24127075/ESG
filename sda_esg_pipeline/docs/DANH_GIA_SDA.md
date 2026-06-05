@@ -24,7 +24,7 @@ Tuy nhiên, **một số đoạn code minh hoạ không chạy được nguyên 
 | 8 | HTTP 403 do thiếu User-Agent khi tải báo cáo | 🟠 Trung bình | ✅ Đã vá |
 | 9 | Camelot `pages='all'` treo worker với báo cáo lớn | 🟡 Thấp | ✅ Đã vá |
 | 10 | Các bẫy nhỏ trong code SDA gốc | 🟡 Thấp | ✅ Đã vá |
-| 11 | Quota Google CSE 100/ngày cho 310 mã | 🟡 Vận hành | ⚠ Ghi nhận |
+| 11 | Quota Google CSE 100/ngày + cần API key trả phí cho 310 mã | 🟠 Trung bình | ✅ Đã vá (đổi sang DuckDuckGo) |
 
 **Sau khi vá: toàn bộ 21 test xanh, demo §10 tái tạo chính xác, và pipeline chạy được trên dữ liệu thật** (chi tiết bằng chứng ở cuối).
 
@@ -139,9 +139,13 @@ Ví dụ §10:
 - **Windows/cp1252:** banner tiếng Việt của vnstock làm `UnicodeEncodeError` → **đã thêm** `ensure_utf8_io()` (reconfigure stdout/stderr UTF-8) trong `logging_config`.
 - **Regex nhỏ:** `LINK_PATTERN` (`download.*id=`) chưa escape dấu chấm; heading regex không bắt `XI/XII`. (Thấp, chưa đụng.)
 
-### 🟡 #11 — Quota Google CSE 100/ngày cho 310 mã
+### 🟠 #11 — Quota Google CSE 100/ngày + cần API key trả phí
 
-- Mỗi mã cần ≥1 truy vấn ⇒ **>3 ngày/1 API key** để quét hết. SDA có circuit breaker + DLQ nhưng **thiếu** chiến lược chia ngày / xoay nhiều key / nguồn thay thế (đọc trực tiếp HOSE/HNX). Ghi nhận để quy hoạch vận hành.
+- Tier 2 của SDA dùng **Google Custom Search Engine**: cần `GOOGLE_API_KEY` + `GOOGLE_CX_ID`, **chỉ 100 truy vấn/ngày** miễn phí ⇒ với 310 mã (≥1 query/mã) phải **>3 ngày/1 key** hoặc trả phí ($5/1.000 query). Phụ thuộc khóa + chi phí + quota là rào cản vận hành thật.
+
+**Bản vá** (`phase1_ingestion/crawler_tier2.py`): chuyển Tier 2 sang **DuckDuckGo** (gói `ddgs`) — **miễn phí, không cần API key, không quota cứng**. Giữ nguyên: lọc domain piracy, cache Redis (tùy chọn), circuit breaker khi bị rate-limit → DLQ. Thêm `scripts/run_phase2_pdf.py --search` để tự tìm + tải + xử lý báo cáo không cần hạ tầng.
+- ✅ Kiểm chứng: tìm & tải được báo cáo thật (vd FPT trên `fpt.vn`, ESG FPT 2023 trên `fpt.com`) không cần key.
+- Lưu ý: nhiều báo cáo VN là **bản scan ảnh** (không có lớp text) ⇒ cần `--scanned` (OCR) — liên quan #6/#7.
 
 ---
 
@@ -178,4 +182,4 @@ Ví dụ §10:
 2. **Layout-aware extraction** (PyMuPDF blocks) + lọc header/footer theo tần suất + nhận diện heading theo font (#6).
 3. **Table OCR cho bản scan** (PP-Structure/Table Transformer) (#7).
 4. **Taxonomy:** duy trì song song bản có dấu + mở rộng từ khoá; cân nhắc gắn nhãn bằng PhoBERT (mô hình) thay vì chỉ từ điển, để giảm FP/tăng recall.
-5. **Khám phá báo cáo:** ưu tiên đọc trực tiếp cổng HOSE/HNX (Tier 1) để giảm phụ thuộc quota Google CSE (#11).
+5. **Khám phá báo cáo:** đã đổi Tier 2 sang DuckDuckGo (miễn phí); có thể bổ sung đọc trực tiếp cổng HOSE/HNX (Tier 1) và **auto-OCR** khi PDF là bản scan (#7, #11).

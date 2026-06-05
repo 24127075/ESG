@@ -81,8 +81,9 @@ def crawl_reports(year: int = 2025, tickers: list[str] | None = None) -> dict:
         for ticker in universe:
             official_domain = _official_domain(ticker)
             try:
-                # Quota guard for Google CSE (100/day, §3.2).
-                limiter.consume_quota("google_cse", daily_quota=100)
+                # Politeness rate-limit against the free DuckDuckGo search
+                # (no daily API quota anymore — Tier 2 is keyless, §3.2).
+                limiter.check_rate_limit("ddg_search", limit=60, window_seconds=60)
                 url = search_esg_report(
                     ticker, year, official_domain,
                     redis_client=redis_client, dlq_push=_dlq_push,
