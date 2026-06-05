@@ -142,7 +142,55 @@ python scripts/run_phase2_pdf.py --pdf scan.pdf --ticker ABC --year 2023 --scann
 
 Kết quả: `out/phase2/<MÃ>_<NĂM>_chunks.jsonl` (mỗi dòng 1 chunk đã gắn nhãn E/S/G).
 
-### 5.5 Chạy **toàn bộ stack** (Celery + Redis + Postgres)
+### 5.5 Cào báo cáo ESG cho **TOÀN BỘ vũ trụ 311 mã** (`crawl_esg_universe.py`)
+
+Chạy hàng loạt đúng luồng §5.4 (tìm → tải → Phase 2 → JSONL) cho **mọi mã × mỗi năm**, đọc danh mục từ `ff_universe.csv` (cột `ticker`, 311 mã). Đây là entrypoint để dựng **dataset đầu vào ở quy mô vũ trụ**.
+
+```powershell
+# Cả vũ trụ, 2020–2024 (≈ 311 × 5 = 1.555 lượt):
+python scripts/crawl_esg_universe.py --years 2020-2024
+
+# Test trước 5 mã, một năm:
+python scripts/crawl_esg_universe.py --years 2023 --limit 5
+
+# Một năm, xoá PDF sau khi trích để tiết kiệm ổ (vd Kaggle):
+python scripts/crawl_esg_universe.py --years 2020 --no-keep-pdf --delay 6
+```
+
+**Các cờ:**
+
+| Cờ | Ý nghĩa | Mặc định |
+| --- | --- | --- |
+| `--universe` | Đường dẫn `ff_universe.csv` | file ở gốc repo |
+| `--years` | Khoảng `2020-2024` hoặc danh sách `2020,2022` | `2020-2024` |
+| `--limit N` | Chỉ N mã đầu (test) | `0` = tất cả |
+| `--delay` | Giây nghỉ giữa các lần search (chống rate-limit DuckDuckGo) | `5` |
+| `--max-results` | Số kết quả DuckDuckGo mỗi lần | `10` |
+| `--no-keep-pdf` | Xoá PDF sau khi trích, chỉ giữ JSONL | giữ PDF |
+| `--scanned` | Ép nhánh OCR (Tesseract) cho mọi báo cáo | tắt |
+| `--retry-failed` | Khi resume, thử lại các mã-năm **chưa** thành công | tắt |
+| `--no-resume` | Bỏ qua manifest, chạy lại từ đầu | tắt |
+
+**Resume & manifest.** Mỗi mã-năm ghi một dòng vào `out/phase2/_manifest.csv` (`ticker,year,status,url,n_chunks,error`). Chạy lại sẽ **tự bỏ qua** mã-năm đã xong; có thể **Ctrl-C an toàn** bất cứ lúc nào, manifest được giữ. Các trạng thái:
+
+- `processed` — có ≥1 chunk ESG (thành công).
+- `no_chunks` — tải được PDF nhưng 0 chunk (thường là **bản scan ảnh** → chạy lại `--scanned`; hoặc PDF không liên quan).
+- `not_found` — search không ra PDF nào.
+- `download_failed` / `search_error` — lỗi tải / lỗi Phase 2 (xem cột `error`).
+
+> **⚠ Chất lượng nguồn (quan trọng).** Search `filetype:pdf` của DuckDuckGo đôi khi trả **nhầm công ty/năm** (mã A lại ra báo cáo công ty B). Hướng vận hành hiện tại là **"cào rộng, lọc sau"**: pipeline vẫn cào hết, rồi **lọc hậu kỳ** bằng cột `url` trong `_manifest.csv` (đối chiếu link có chứa đúng mã CK / đúng năm). Chi tiết ở [DANH_GIA_SDA.md](DANH_GIA_SDA.md) #12.
+
+**Trên Kaggle** (Linux — extraction tốt hơn Windows). Bật **Internet** ở *Settings*, rồi:
+
+```python
+!git clone -b ESG https://github.com/24127075/ESG.git /kaggle/working/ESG
+!pip install -q -r /kaggle/working/ESG/sda_esg_pipeline/requirements.txt
+!cd /kaggle/working/ESG/sda_esg_pipeline && python scripts/crawl_esg_universe.py --years 2020 --no-keep-pdf --delay 6
+```
+
+Phiên Kaggle tối đa ~12h và `/kaggle/working` **chỉ giữ lại khi *Save Version*** ⇒ nên chạy **từng năm một** (≈311 job/lần) và lưu/tải `out/phase2/` sau mỗi lần. Lỗi `vnstock` *"Guest 20 req/phút"* (nếu thấy) thuộc luồng **định lượng**, không ảnh hưởng luồng báo cáo.
+
+### 5.6 Chạy **toàn bộ stack** (Celery + Redis + Postgres)
 
 ```bash
 # Cách 1 — Docker Compose (kèm sandbox AppArmor, §4.1):
@@ -155,7 +203,7 @@ celery -A esg_pipeline.scheduler.celery_app:app beat   --loglevel=INFO
 
 Lịch Beat: `scan_quantitative` (02:00), `crawl_reports` (03:00), `poll_rss` (mỗi 30 phút). Lỗi 429 (quota) → circuit breaker → đẩy payload sang hàng đợi `dlq`.
 
-### 5.6 Poll RSS một lần
+### 5.7 Poll RSS một lần
 
 ```powershell
 esg-pipeline rss
@@ -183,6 +231,8 @@ esg-pipeline rss
 ```json
 {"ticker":"VNM","fiscal_year":2024,"heading_context":"...","filtered_chunk_text":"...","token_count":120,"matched_tags":["E_Emissions","G_Governance"],"chunk_source":"TEXT"}
 ```
+
+**Cào hàng loạt (§5.5):** đầu vào danh mục là `ff_universe.csv` (311 mã); ngoài JSONL mỗi mã-năm, còn ghi `out/phase2/_manifest.csv` (`ticker,year,status,url,n_chunks,error`) để theo dõi tiến độ, **resume**, và **lọc hậu kỳ** các kết quả nhầm nguồn theo cột `url`.
 
 ---
 

@@ -2,7 +2,7 @@
 
 **Tài liệu nguồn:** `SDA-Data-Ingestion-Preprocessing-v3.pdf` (Phase 1 & 2 — Hệ thống Mô hình Định lượng ESG)
 **Phạm vi rà soát:** toàn bộ code trong `sda_esg_pipeline/` so với đặc tả; có kiểm chứng bằng **dữ liệu thật** (vnstock FREE + báo cáo PDF tải về).
-**Ngày:** 2026-06-05
+**Ngày:** 2026-06-06
 
 ---
 
@@ -25,6 +25,7 @@ Tuy nhiên, **một số đoạn code minh hoạ không chạy được nguyên 
 | 9 | Camelot `pages='all'` treo worker với báo cáo lớn | 🟡 Thấp | ✅ Đã vá |
 | 10 | Các bẫy nhỏ trong code SDA gốc | 🟡 Thấp | ✅ Đã vá |
 | 11 | Quota Google CSE 100/ngày + cần API key trả phí cho 310 mã | 🟠 Trung bình | ✅ Đã vá (đổi sang DuckDuckGo) |
+| 12 | `_load_universe()` chỉ 5 mã + thiếu công cụ cào hàng loạt 311 mã | 🟠 Trung bình | ✅ Thêm runner / ◐ caveat chất lượng |
 
 **Sau khi vá: toàn bộ 21 test xanh, demo §10 tái tạo chính xác, và pipeline chạy được trên dữ liệu thật** (chi tiết bằng chứng ở cuối).
 
@@ -147,6 +148,20 @@ Ví dụ §10:
 - ✅ Kiểm chứng: tìm & tải được báo cáo thật (vd FPT trên `fpt.vn`, ESG FPT 2023 trên `fpt.com`) không cần key.
 - Lưu ý: nhiều báo cáo VN là **bản scan ảnh** (không có lớp text) ⇒ cần `--scanned` (OCR) — liên quan #6/#7.
 
+### 🟠 #12 — `_load_universe()` chỉ có 5 mã & thiếu công cụ cào cả vũ trụ
+
+- `scheduler/tasks.py::_load_universe()` trả **cứng 5 mã** (`VNM, FPT, HPG, VCB, MWG`) với chú thích "stub". Vũ trụ thật của mô hình FF6 là **311 mã** trong `ff_universe.csv` ⇒ scheduler/crawler chạy nguyên trạng chỉ phủ **<2%** danh mục.
+- Chưa có entrypoint nào cào **hàng loạt** báo cáo ESG cho cả vũ trụ — `scripts/run_phase2_pdf.py` chỉ xử lý **một** mã/lần.
+
+**Bản vá** (`scripts/crawl_esg_universe.py` — mới):
+- Đọc `ff_universe.csv`, lặp **mỗi mã × mỗi năm**, tái dùng đúng chuỗi `search_esg_report → download_document → process_single_document` (không thêm phụ thuộc mới).
+- **Resume** qua `out/phase2/_manifest.csv`; **back-off lũy thừa** khi DuckDuckGo rate-limit (60s → tối đa 15 phút); chịu lỗi từng mã (một mã hỏng không vỡ cả mẻ); cờ `--no-keep-pdf` cho ổ đĩa hạn chế (Kaggle).
+- ✅ Kiểm chứng trên **Kaggle** (3 mã test 2023): 1 `processed` (16 chunk) + 2 `no_chunks` — pipeline chạy đúng end-to-end, manifest + resume hoạt động.
+
+**Caveat còn lại — hướng "cào rộng, lọc sau" (đang chọn):**
+- Search `filetype:pdf` có thể trả **nhầm công ty/năm** hoặc **bản scan** (`no_chunks`). Hiện **lọc hậu kỳ** bằng cột `url` trong manifest (đối chiếu link chứa đúng mã CK/năm). Bản **siết độ chính xác** (bắt buộc URL chứa đúng mã CK) được giữ lại như **lựa chọn**, chưa bật theo yêu cầu vận hành.
+- `_load_universe()` vẫn nên đấu vào `ff_universe.csv`/DB ở production để scheduler phủ đủ 311 mã.
+
 ---
 
 ## 3. Những điểm SDA làm **đúng** (giữ nguyên)
@@ -170,6 +185,7 @@ Ví dụ §10:
 | Demo §10 (tái tạo) | `python scripts/run_demo.py` | `"Cong ty huong toi Net Zero. ..."`, `heading_context="Bao cao Moi truong"`, `E_Emissions` ✔ khớp §10 |
 | Quant **thật** | `python scripts/fetch_quant_demo.py --tickers VNM,FPT,HPG` | FPT op-profit 2023 ≈ 9.111 tỷ; VNM/FPT/HPG market-cap hợp lý; ghi CSV |
 | Phase 2 trên **PDF thật** | `... run_phase2_pdf.py --url <BCTN VNM 2024> ...` | tải 6.5MB OK → **51 chunk ESG** (E/S/G) sau vá bỏ dấu |
+| Cào **hàng loạt** (Kaggle) | `python scripts/crawl_esg_universe.py --years 2023 --limit 3` | 3 job: 1 `processed` (16 chunk) + 2 `no_chunks`; manifest + resume OK |
 | Throughput | đo nội bộ | taxonomy ~47.700 tr/s; clean+chunk ~600 tr/s |
 
 > Nguồn báo cáo thật dùng để kiểm chứng: [BCTN Vinamilk 2024 (Vietstock mirror)](https://static2.vietstock.vn/data/HOSE/2024/BCTN/VN/VNM_Baocaothuongnien_2024.pdf) và trang [Báo cáo PTBV Vinamilk 2023](https://www.vinamilk.com.vn/phat-trien-ben-vung/bao-cao/2023/pdf/RGB-VIE-Vinamilk-SR-2023.pdf) (URL này trả HTML/WAF — minh hoạ vấn đề #8).
@@ -183,3 +199,4 @@ Ví dụ §10:
 3. **Table OCR cho bản scan** (PP-Structure/Table Transformer) (#7).
 4. **Taxonomy:** duy trì song song bản có dấu + mở rộng từ khoá; cân nhắc gắn nhãn bằng PhoBERT (mô hình) thay vì chỉ từ điển, để giảm FP/tăng recall.
 5. **Khám phá báo cáo:** đã đổi Tier 2 sang DuckDuckGo (miễn phí); có thể bổ sung đọc trực tiếp cổng HOSE/HNX (Tier 1) và **auto-OCR** khi PDF là bản scan (#7, #11).
+6. **Cào toàn bộ vũ trụ:** đã có `scripts/crawl_esg_universe.py` (resume + manifest) cho 311 mã; cần (a) đấu `_load_universe()` vào `ff_universe.csv`/DB, (b) tùy chọn **siết độ chính xác** URL (bắt buộc chứa đúng mã CK) để giảm nhầm công ty, (c) auto `--scanned` cho mã `no_chunks` (#7, #12).
