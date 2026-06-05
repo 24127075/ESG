@@ -1,0 +1,92 @@
+[build-system]
+requires = ["setuptools>=68", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "sda-esg-pipeline"
+version = "3.0.0"
+description = "ESG Quantitative Model — Data Ingestion (Phase 1) & Preprocessing (Phase 2) pipeline"
+readme = "README.md"
+requires-python = ">=3.10"
+license = { text = "Proprietary" }
+authors = [{ name = "ESG Data Engineering Team" }]
+
+# Runtime deps are pinned in requirements.txt; kept loose here so the package
+# imports with only the core stack present (heavy deps are imported lazily).
+dependencies = [
+    "pandas>=2.0",
+    "tenacity>=8.2",
+    "requests>=2.31",
+]
+
+[project.optional-dependencies]
+crawler = [
+    "beautifulsoup4>=4.12",
+    "lxml>=4.9",
+    "feedparser>=6.0",
+    "redis>=5.0",
+    "ddgs>=6.0",          # FREE DuckDuckGo search (Tier 2), no API key
+    "werkzeug>=3.0",
+]
+extract = [
+    "PyMuPDF>=1.23",
+    "pdfplumber>=0.10",
+    "camelot-py[cv]>=0.11",
+    "pytesseract>=0.3.10",
+    "Pillow>=10.0",
+]
+nlp = ["transformers>=4.38", "torch>=2.0", "pyahocorasick>=2.0"]
+infra = ["celery>=5.3", "boto3>=1.34", "psycopg2-binary>=2.9", "clamd>=1.0.2"]
+dev = ["pytest>=8.0"]
+
+[project.scripts]
+esg-pipeline = "esg_pipeline.cli:main"
+
+[tool.setuptools.packages.find]
+include = ["esg_pipeline*"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+addopts = "-q"
+
+[tool.ruff]
+line-length = 100
+target-version = "py310"
+
+[tool.pyrefly]
+# These third-party packages are optional/heavy and imported lazily (inside
+# functions or behind try/except ImportError) so the core package runs without
+# them. Treat them as `Any` so the type checker doesn't raise missing-import
+# when only the core stack is installed; install the matching extras
+# (`pip install -e .[crawler,extract,nlp,infra]`) for full coverage.
+replace-imports-with-any = [
+  # infra extra
+  "clamd",
+  "boto3",
+  "botocore",
+  "botocore.*",
+  "hvac",
+  "psycopg2",
+  "celery",
+  "celery.*",
+  # crawler extra
+  "redis",
+  "feedparser",
+  "bs4",
+  "werkzeug",
+  "werkzeug.*",
+  "ddgs",
+  # extract extra
+  "fitz",
+  "camelot",
+  "pdfplumber",
+  "pytesseract",
+  "PIL",
+  "PIL.*",
+  # nlp extra
+  "transformers",
+  "ahocorasick",
+  # quantitative engine (vnstock Sponsor Tier)
+  "vnstock",
+  "vnstock_data",
+]

@@ -1,0 +1,37 @@
+{
+  "version": "1.2",
+  "maintainer": "ESG SME Team",
+  "categories": {
+    "E_Emissions": [
+      { "keyword": "khi nha kinh", "weight": 2 },
+      { "keyword": "phat thai", "weight": 1 },
+      { "keyword": "co2", "weight": 1 },
+      { "keyword": "kwh", "weight": 1 },
+      { "keyword": "net zero", "weight": 2 },
+      { "keyword": "trung hoa carbon", "weight": 2 },
+      { "keyword": "nang luong tai tao", "weight": 2 }
+    ],
+    "E_Resources": [
+      { "keyword": "tieu thu nuoc", "weight": 1 },
+      { "keyword": "quan ly chat thai", "weight": 2 },
+      { "keyword": "kinh te tuan hoan", "weight": 2 }
+    ],
+    "S_Labor": [
+      { "keyword": "tai nan lao dong", "weight": 2 },
+      { "keyword": "an toan lao dong", "weight": 2 },
+      { "keyword": "phuc loi nhan vien", "weight": 1 },
+      { "keyword": "binh dang gioi", "weight": 2 }
+    ],
+    "S_Community": [
+      { "keyword": "trach nhiem xa hoi", "weight": 2 },
+      { "keyword": "cong dong dia phuong", "weight": 1 }
+    ],
+    "G_Governance": [
+      { "keyword": "hoi dong quan tri", "weight": 1 },
+      { "keyword": "kiem toan doc lap", "weight": 2 },
+      { "keyword": "chong tham nhung", "weight": 2 },
+      { "keyword": "minh bach", "weight": 1 },
+      { "keyword": "thanh vien doc lap", "weight": 2 }
+    ]
+  }
+}
