@@ -51,6 +51,23 @@ def test_chunk_respects_max_tokens_and_heading_context():
     assert chunks[0]["heading"] == "1. Moi truong"
 
 
+def test_chunk_splits_oversized_single_paragraph():
+    # One giant run-on paragraph (no blank-line breaks) — the case that produced
+    # the >600-token chunks. Every emitted chunk must stay within the bound.
+    giant = " ".join(f"Cau so {i} ve phat thai khi nha kinh." for i in range(200))
+    chunks = chunk_document([giant])
+    assert len(chunks) > 1
+    assert all(c["token_count"] <= 200 for c in chunks)
+
+
+def test_chunk_hard_splits_unpunctuated_run_on():
+    # No sentence boundaries at all → must fall back to word-level hard splitting.
+    giant = " ".join("phatthai" for _ in range(500))
+    chunks = chunk_document([giant])
+    assert len(chunks) > 1
+    assert all(c["token_count"] <= 200 for c in chunks)
+
+
 # ── taxonomy ────────────────────────────────────────────────────────────────
 def test_taxonomy_weight_threshold_and_esg_ordering():
     tagger = TaxonomyTagger(CONFIG)

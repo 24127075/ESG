@@ -33,6 +33,11 @@ _HEADING_RE = re.compile(
     r"(?i)^((?:I{1,3}|IV|V|VI{0,3}|IX|X)\.|\d{1,2}\.|\d{1,2}\.\d{1,2}\.?)\s+.*$"
 )
 
+# Sentence boundary: end punctuation followed by whitespace. The lookbehind on
+# whitespace means decimal/thousands figures like "1.500" (no space after the
+# dot) are NOT split, while real sentence breaks are.
+_SENTENCE_END_RE = re.compile(r"(?<=[.!?…])\s+")
+
 _tokenizer = None
 _tokenizer_loaded = False
 
@@ -140,6 +145,65 @@ def clean_text_advanced(raw_text: str, normalize_ocr: bool = False) -> list[str]
     return [line.strip() for line in text.split("\n") if line.strip()]
 
 
+def _split_sentences(text: str) -> list[str]:
+    """Split text into sentences on terminal punctuation (Vietnamese-safe)."""
+    return [s for s in _SENTENCE_END_RE.split(text.strip()) if s]
+
+
+def _hard_split_words(text: str, max_tokens: int) -> list[tuple[str, int]]:
+    """Last resort: pack words greedily into <= max_tokens pieces.
+
+    Used when a single sentence already exceeds the token bound (e.g. an
+    un-punctuated run-on extracted from a PDF). Returns ``(text, count)`` pairs.
+    """
+    pieces: list[tuple[str, int]] = []
+    buf: list[str] = []
+    buf_tokens = 0
+    for word in text.split():
+        wt = count_tokens(word)
+        if buf and buf_tokens + wt > max_tokens:
+            pieces.append((" ".join(buf), buf_tokens))
+            buf, buf_tokens = [word], wt
+        else:
+            buf.append(word)
+            buf_tokens += wt
+    if buf:
+        pieces.append((" ".join(buf), buf_tokens))
+    return pieces
+
+
+def split_to_token_limit(text: str, max_tokens: int = MAX_TOKENS) -> list[tuple[str, int]]:
+    """Split any text block into pieces that each fit within ``max_tokens``.
+
+    Sentence-aware: sentences are packed greedily up to the bound; a single
+    sentence still over the bound is hard-split on word boundaries. Text already
+    within the bound is returned as a single ``(text, count)`` piece, so this is
+    safe to call unconditionally. Empty/whitespace text yields ``[]``.
+    """
+    text = text.strip()
+    if not text:
+        return []
+    pieces: list[tuple[str, int]] = []
+    buf = ""
+    buf_tokens = 0
+    for sentence in _split_sentences(text):
+        sent_tokens = count_tokens(sentence)
+        if sent_tokens > max_tokens:
+            if buf:
+                pieces.append((buf, buf_tokens))
+                buf, buf_tokens = "", 0
+            pieces.extend(_hard_split_words(sentence, max_tokens))
+        elif buf_tokens + sent_tokens > max_tokens:
+            pieces.append((buf, buf_tokens))
+            buf, buf_tokens = sentence, sent_tokens
+        else:
+            buf = f"{buf} {sentence}".strip()
+            buf_tokens += sent_tokens
+    if buf:
+        pieces.append((buf, buf_tokens))
+    return pieces
+
+
 def chunk_document(
     paragraphs: list[str], initial_heading: str = "Thong tin chung"
 ) -> list[dict]:
@@ -177,7 +241,19 @@ def chunk_document(
             current_heading = para
         else:
             para_tokens = count_tokens(para)
-            if current_tokens + para_tokens > MAX_TOKENS:
+            if para_tokens > MAX_TOKENS:
+                # The paragraph alone overflows the window (e.g. a PDF block
+                # with no blank-line breaks). Flush, split it sentence-aware,
+                # emit the full pieces, and keep the last one in the buffer so
+                # following short paragraphs can still pack into it.
+                save_chunk()
+                pieces = split_to_token_limit(para)
+                for piece_text, piece_tokens in pieces[:-1]:
+                    current_text, current_tokens = piece_text, piece_tokens
+                    save_chunk()
+                if pieces:
+                    current_text, current_tokens = pieces[-1]
+            elif current_tokens + para_tokens > MAX_TOKENS:
                 save_chunk()
                 current_text = para
                 current_tokens = para_tokens

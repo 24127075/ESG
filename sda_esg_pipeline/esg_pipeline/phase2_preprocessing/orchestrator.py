@@ -19,7 +19,7 @@ import json
 import logging
 import os
 
-from .cleaning import chunk_document, clean_text_advanced, count_tokens
+from .cleaning import chunk_document, clean_text_advanced, split_to_token_limit
 from .extraction import extract_document
 from .taxonomy import TaxonomyTagger
 
@@ -57,20 +57,22 @@ def _build_records(
             )
 
     # Flattened table rows → one candidate chunk each (chunk_source = TABLE).
+    # A long row is split so no TABLE chunk exceeds the PhoBERT-safe bound either.
     for sentence in extracted.get("tables", []):
-        tags = tagger.tag(sentence)
-        if tags:
-            records.append(
-                {
-                    "ticker": ticker,
-                    "fiscal_year": fiscal_year,
-                    "heading_context": "Bang du lieu",
-                    "filtered_chunk_text": sentence,
-                    "token_count": count_tokens(sentence),
-                    "matched_tags": tags,
-                    "chunk_source": "TABLE",
-                }
-            )
+        for piece_text, piece_tokens in split_to_token_limit(sentence):
+            tags = tagger.tag(piece_text)
+            if tags:
+                records.append(
+                    {
+                        "ticker": ticker,
+                        "fiscal_year": fiscal_year,
+                        "heading_context": "Bang du lieu",
+                        "filtered_chunk_text": piece_text,
+                        "token_count": piece_tokens,
+                        "matched_tags": tags,
+                        "chunk_source": "TABLE",
+                    }
+                )
 
     return records
 
